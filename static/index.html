@@ -1,0 +1,385 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spam Filter</title>
+<style>
+  :root {
+    --bg:#f6f7f9; --card:#ffffff; --text:#1d2330; --muted:#6b7280; --border:#e2e5ea;
+    --accent:#2563eb; --spam:#b91c1c; --spam-bg:#fee2e2; --warn:#92400e; --warn-bg:#fef3c7;
+    --ham:#166534; --ham-bg:#dcfce7; --input:#ffffff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:#12151b; --card:#1b2029; --text:#e6e9ef; --muted:#9aa3b2; --border:#2c3340;
+      --accent:#60a5fa; --spam:#fca5a5; --spam-bg:#3b1a1a; --warn:#fcd34d; --warn-bg:#3a2e10;
+      --ham:#86efac; --ham-bg:#12301d; --input:#12151b;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text);
+         font:15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header { display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:space-between;
+           padding:14px 24px; background:var(--card); border-bottom:1px solid var(--border); }
+  header h1 { font-size:18px; margin:0; }
+  .badge { font-size:12px; padding:2px 8px; border-radius:999px; background:var(--bg);
+           border:1px solid var(--border); color:var(--muted); margin-left:8px; }
+  .key { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--muted); }
+  .key input { width:150px; }
+  main { max-width:960px; margin:0 auto; padding:20px 16px 60px; }
+  nav { display:flex; gap:4px; border-bottom:1px solid var(--border); margin-bottom:20px; }
+  nav button { background:none; border:none; padding:10px 16px; cursor:pointer; color:var(--muted);
+               font:inherit; border-bottom:2px solid transparent; margin-bottom:-1px; }
+  nav button.active { color:var(--accent); border-bottom-color:var(--accent); font-weight:600; }
+  .card { background:var(--card); border:1px solid var(--border); border-radius:10px;
+          padding:18px; margin-bottom:16px; }
+  label { display:block; font-size:13px; color:var(--muted); margin:12px 0 4px; }
+  input, textarea { width:100%; padding:9px 11px; font:inherit; color:var(--text);
+                    background:var(--input); border:1px solid var(--border); border-radius:7px; }
+  textarea { min-height:150px; resize:vertical; }
+  button.primary, button.secondary, button.good, button.bad {
+    font:inherit; padding:9px 16px; border-radius:7px; cursor:pointer; border:1px solid transparent; }
+  button.primary { background:#2563eb; color:#fff; }
+  button.secondary { background:var(--card); color:var(--text); border-color:var(--border); }
+  button.good { background:var(--ham-bg); color:var(--ham); border-color:var(--ham); }
+  button.bad { background:var(--spam-bg); color:var(--spam); border-color:var(--spam); }
+  button:disabled { opacity:.5; cursor:not-allowed; }
+  .row { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-top:14px; }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; align-items:center; font-size:13px; color:var(--muted); }
+  .chip { padding:2px 10px; border-radius:999px; background:var(--bg); border:1px solid var(--border);
+          color:var(--text); font-size:13px; }
+  .chip.link { cursor:pointer; }
+  .chip.link:hover { border-color:var(--accent); }
+  .verdict { display:inline-block; font-weight:700; padding:4px 14px; border-radius:999px; font-size:16px; }
+  .v-SPAM { background:var(--spam-bg); color:var(--spam); }
+  .v-SUSPICIOUS { background:var(--warn-bg); color:var(--warn); }
+  .v-HAM { background:var(--ham-bg); color:var(--ham); }
+  .bar { height:10px; border-radius:6px; background:var(--bg); border:1px solid var(--border);
+         overflow:hidden; margin:8px 0 2px; }
+  .bar > div { height:100%; background:var(--accent); }
+  .muted { color:var(--muted); font-size:13px; }
+  .msg { margin-top:12px; padding:10px 12px; border-radius:7px; font-size:14px; }
+  .msg.ok { background:var(--ham-bg); color:var(--ham); }
+  .msg.err { background:var(--spam-bg); color:var(--spam); }
+  .msg.info { background:var(--bg); color:var(--muted); border:1px solid var(--border); }
+  .stats { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:12px; }
+  .stat { background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:12px; }
+  .stat b { display:block; font-size:24px; }
+  .stat span { color:var(--muted); font-size:13px; }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th, td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--border); }
+  th { color:var(--muted); font-weight:600; font-size:12px; text-transform:uppercase; }
+  .tablewrap { overflow-x:auto; }
+  h2 { font-size:16px; margin:0 0 6px; }
+  .hidden { display:none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Spam Filter <span class="badge" id="version">model: …</span></h1>
+  <div class="key"><label for="apikey" style="margin:0">API key</label>
+    <input id="apikey" type="password" placeholder="if required" autocomplete="off"></div>
+</header>
+
+<main>
+  <nav>
+    <button class="active" data-tab="check">Check an email</button>
+    <button data-tab="learn">Feedback &amp; learning</button>
+    <button data-tab="models">Model versions</button>
+  </nav>
+
+  <!-- ================= CHECK ================= -->
+  <section id="tab-check">
+    <div class="card">
+      <div class="chips">Try an example:
+        <span class="chip link" data-ex="scam">Scam prize</span>
+        <span class="chip link" data-ex="normal">Normal work email</span>
+        <span class="chip link" data-ex="tombola">Real tombola win</span>
+      </div>
+      <label for="sender">Sender</label>
+      <input id="sender" placeholder="name@example.com">
+      <label for="subject">Subject</label>
+      <input id="subject" placeholder="Email subject">
+      <label for="body">Message</label>
+      <textarea id="body" placeholder="Paste the email or SMS text here"></textarea>
+      <div class="row">
+        <button class="primary" id="check">Check</button>
+        <button class="secondary" id="clear">Clear</button>
+      </div>
+      <div id="check-msg"></div>
+    </div>
+
+    <div class="card hidden" id="result">
+      <h2>Result</h2>
+      <div><span class="verdict" id="verdict"></span>
+        <span class="muted" style="margin-left:10px" id="prob"></span></div>
+      <div class="bar"><div id="probbar" style="width:0%"></div></div>
+      <div class="muted">Spam probability</div>
+      <div class="chips" style="margin-top:12px" id="why"></div>
+
+      <hr style="border:none;border-top:1px solid var(--border);margin:18px 0">
+      <h2>Was this right?</h2>
+      <div class="muted">Your answer is saved and used the next time the model is retrained.</div>
+      <div class="row">
+        <button class="bad" id="fb-spam">This is spam</button>
+        <button class="good" id="fb-ham">This is NOT spam</button>
+      </div>
+      <div id="fb-msg"></div>
+    </div>
+  </section>
+
+  <!-- ================= LEARN ================= -->
+  <section id="tab-learn" class="hidden">
+    <div class="card">
+      <h2>How the model learns from experience</h2>
+      <div class="muted">Each correction you give is stored. When you click <b>Retrain</b>, a new model is
+        trained on the original examples plus all corrections. Corrections count
+        <b id="weight">5</b>&times; more than ordinary examples, so a few of them can change the result.
+        The old model is kept, so you can go back to it from the Model versions tab.</div>
+    </div>
+
+    <div class="card">
+      <div class="stats">
+        <div class="stat"><b id="s-total">0</b><span>Corrections saved</span></div>
+        <div class="stat"><b id="s-spam">0</b><span>Marked as spam</span></div>
+        <div class="stat"><b id="s-ham">0</b><span>Marked as not spam</span></div>
+        <div class="stat"><b id="s-pending">0</b><span>Waiting for retraining</span></div>
+      </div>
+      <div class="row">
+        <button class="primary" id="retrain">Retrain model with corrections</button>
+        <button class="secondary" id="refresh">Refresh</button>
+      </div>
+      <div id="retrain-msg"></div>
+    </div>
+
+    <div class="card">
+      <h2>Recent corrections</h2>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Date</th><th>Subject</th><th>Marked as</th></tr></thead>
+          <tbody id="recent"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= MODELS ================= -->
+  <section id="tab-models" class="hidden">
+    <div class="card">
+      <h2>Saved model versions</h2>
+      <div class="muted">"Wrongly blocked" and "Missed" are measured on emails the model did not train on.
+        Lower is better. Activating an older version is an instant rollback.</div>
+      <div class="tablewrap" style="margin-top:10px">
+        <table>
+          <thead><tr><th>Version</th><th>Trained</th><th>AUC</th><th>Wrongly blocked</th>
+            <th>Missed spam</th><th>Corrections used</th><th></th></tr></thead>
+          <tbody id="models"></tbody>
+        </table>
+      </div>
+      <div id="models-msg"></div>
+    </div>
+  </section>
+</main>
+
+<script>
+const $ = (s) => document.querySelector(s);
+
+// ---------- helpers ----------
+const keyInput = $('#apikey');
+keyInput.value = sessionStorage.getItem('spamkey') || '';
+keyInput.addEventListener('input', () => sessionStorage.setItem('spamkey', keyInput.value));
+
+async function api(path, opts = {}) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (keyInput.value) headers['x-api-key'] = keyInput.value;
+  const res = await fetch(path, { ...opts, headers });
+  let data = null;
+  try { data = await res.json(); } catch (e) { /* no body */ }
+  if (!res.ok) {
+    if (res.status === 401) throw new Error('Invalid or missing API key. Enter it in the top-right field.');
+    const d = data && data.detail;
+    throw new Error(typeof d === 'string' ? d : (d ? JSON.stringify(d) : 'Request failed (' + res.status + ')'));
+  }
+  return data;
+}
+
+function el(tag, text, cls) {           // textContent only: email text is never interpreted as HTML
+  const e = document.createElement(tag);
+  if (text !== undefined && text !== null) e.textContent = text;
+  if (cls) e.className = cls;
+  return e;
+}
+function show(target, text, kind) {
+  const box = $(target);
+  box.replaceChildren();
+  if (text) box.appendChild(el('div', text, 'msg ' + kind));
+}
+function setBusy(btn, busy, label) {
+  btn.disabled = busy;
+  if (label) btn.textContent = label;
+}
+
+// ---------- tabs ----------
+document.querySelectorAll('nav button').forEach((b) => b.addEventListener('click', () => {
+  document.querySelectorAll('nav button').forEach((x) => x.classList.toggle('active', x === b));
+  ['check', 'learn', 'models'].forEach((t) => $('#tab-' + t).classList.toggle('hidden', t !== b.dataset.tab));
+  if (b.dataset.tab === 'learn') loadStats();
+  if (b.dataset.tab === 'models') loadModels();
+}));
+
+async function loadVersion() {
+  try { const h = await api('/health'); $('#version').textContent = 'model: ' + h.model_version; }
+  catch (e) { $('#version').textContent = 'model: unavailable'; }
+}
+
+// ---------- check ----------
+const EXAMPLES = {
+  scam: { sender: 'promo@win-prizes-now.net', subject: 'You won $1,000,000!',
+          body: 'Click http://bit.ly/abc123 to claim your free prize now. Act now! No purchase necessary.' },
+  normal: { sender: 'abebe@enatbank.com', subject: 'Meeting on Monday',
+            body: 'Hi, can we move the meeting to Monday? Agenda attached.' },
+  tombola: { sender: 'promotions@enatbank.com', subject: 'Congratulations! You won in the Enat tombola',
+             body: 'Your ticket number 4821 was drawn. Please visit your branch with your ID to collect your prize.' },
+};
+document.querySelectorAll('[data-ex]').forEach((c) => c.addEventListener('click', () => {
+  const ex = EXAMPLES[c.dataset.ex];
+  $('#sender').value = ex.sender; $('#subject').value = ex.subject; $('#body').value = ex.body;
+  $('#result').classList.add('hidden'); show('#check-msg');
+}));
+
+let last = null;   // the email currently shown, so feedback refers to it
+
+$('#clear').addEventListener('click', () => {
+  ['#sender', '#subject', '#body'].forEach((s) => { $(s).value = ''; });
+  $('#result').classList.add('hidden'); show('#check-msg'); last = null;
+});
+
+$('#check').addEventListener('click', async () => {
+  const email = { sender: $('#sender').value, subject: $('#subject').value, body: $('#body').value };
+  if (!email.subject.trim() && !email.body.trim()) { show('#check-msg', 'Enter a subject or a message first.', 'err'); return; }
+  const btn = $('#check');
+  setBusy(btn, true, 'Checking…'); show('#check-msg');
+  try {
+    const r = await api('/predict', { method: 'POST', body: JSON.stringify(email) });
+    last = { email, result: r };
+    renderResult(r);
+  } catch (e) {
+    $('#result').classList.add('hidden'); show('#check-msg', e.message, 'err');
+  } finally { setBusy(btn, false, 'Check'); }
+});
+
+const VERDICT_TEXT = { SPAM: 'Spam', SUSPICIOUS: 'Suspicious', HAM: 'Not spam' };
+function renderResult(r) {
+  $('#result').classList.remove('hidden');
+  const v = $('#verdict');
+  v.textContent = VERDICT_TEXT[r.verdict] || r.verdict;
+  v.className = 'verdict v-' + r.verdict;
+  $('#prob').textContent = (r.spam_probability * 100).toFixed(1) + '% spam';
+  $('#probbar').style.width = (r.spam_probability * 100) + '%';
+  const why = $('#why'); why.replaceChildren();
+  if (r.explanation && r.explanation.length) {
+    why.appendChild(el('span', 'Words that raised the spam score:'));
+    r.explanation.forEach((w) => why.appendChild(el('span', w, 'chip')));
+  } else {
+    why.appendChild(el('span', 'No words pushed this email toward spam.'));
+  }
+  show('#fb-msg');
+  $('#fb-spam').disabled = false; $('#fb-ham').disabled = false;
+}
+
+async function sendFeedback(label) {
+  if (!last) return;
+  const spamBtn = $('#fb-spam'), hamBtn = $('#fb-ham');
+  spamBtn.disabled = true; hamBtn.disabled = true;
+  try {
+    await api('/feedback', { method: 'POST', body: JSON.stringify({ ...last.email, correct_label: label }) });
+    const agreed = (label === 'spam') === (last.result.verdict === 'SPAM');
+    show('#fb-msg', (agreed ? 'Thanks, confirmed. ' : 'Thanks, correction saved. ') +
+      'Saved as "' + (label === 'spam' ? 'spam' : 'not spam') + '". Go to Feedback & learning and click Retrain to apply it.', 'ok');
+  } catch (e) {
+    show('#fb-msg', e.message, 'err');
+    spamBtn.disabled = false; hamBtn.disabled = false;
+  }
+}
+$('#fb-spam').addEventListener('click', () => sendFeedback('spam'));
+$('#fb-ham').addEventListener('click', () => sendFeedback('ham'));
+
+// ---------- learn ----------
+async function loadStats() {
+  try {
+    const s = await api('/feedback/stats');
+    $('#s-total').textContent = s.total; $('#s-spam').textContent = s.spam;
+    $('#s-ham').textContent = s.ham; $('#s-pending').textContent = s.pending;
+    $('#weight').textContent = s.feedback_weight;
+    $('#retrain').disabled = s.pending === 0;
+    const body = $('#recent'); body.replaceChildren();
+    if (!s.recent.length) {
+      const tr = el('tr'); const td = el('td', 'No corrections yet. Check an email and use the buttons under the result.', 'muted');
+      td.colSpan = 3; tr.appendChild(td); body.appendChild(tr);
+    }
+    s.recent.forEach((r) => {
+      const tr = el('tr');
+      tr.appendChild(el('td', r.date.replace('T', ' ').replace('+00:00', ' UTC')));
+      tr.appendChild(el('td', r.subject || '(no subject)'));
+      const td = el('td'); td.appendChild(el('span', r.label === 'spam' ? 'Spam' : 'Not spam',
+        'verdict ' + (r.label === 'spam' ? 'v-SPAM' : 'v-HAM') ));
+      td.firstChild.style.fontSize = '12px'; td.firstChild.style.padding = '2px 10px';
+      tr.appendChild(td); body.appendChild(tr);
+    });
+  } catch (e) { show('#retrain-msg', e.message, 'err'); }
+}
+$('#refresh').addEventListener('click', loadStats);
+
+$('#retrain').addEventListener('click', async () => {
+  if (!confirm('Train a new model version using the original data plus all corrections?')) return;
+  const btn = $('#retrain');
+  setBusy(btn, true, 'Training… please wait'); show('#retrain-msg', 'Training a new model. This can take from a few seconds to several minutes.', 'info');
+  try {
+    const m = await api('/retrain', { method: 'POST' });
+    show('#retrain-msg', 'New model ' + m.version + ' is now active. Test results: ' +
+      m.false_positives + ' of ' + m.legit_in_test + ' legitimate emails wrongly blocked, ' +
+      m.false_negatives + ' of ' + m.spam_in_test + ' spam missed (AUC ' + m.roc_auc + '). ' +
+      m.feedback_rows_used + ' corrections used.', 'ok');
+    loadVersion(); loadStats();
+  } catch (e) { show('#retrain-msg', e.message, 'err'); }
+  finally { setBusy(btn, false, 'Retrain model with corrections'); }
+});
+
+// ---------- models ----------
+async function loadModels() {
+  try {
+    const list = await api('/models');
+    const body = $('#models'); body.replaceChildren(); show('#models-msg');
+    list.forEach((m) => {
+      const tr = el('tr');
+      tr.appendChild(el('td', m.version + (m.active ? '  (active)' : '')));
+      tr.appendChild(el('td', (m.trained_at || '').replace('T', ' ')));
+      tr.appendChild(el('td', m.roc_auc == null ? '-' : m.roc_auc));
+      tr.appendChild(el('td', m.false_positives == null ? '-' : m.false_positives));
+      tr.appendChild(el('td', m.false_negatives == null ? '-' : m.false_negatives));
+      tr.appendChild(el('td', m.feedback_rows_used));
+      const td = el('td');
+      if (!m.active) {
+        const b = el('button', 'Activate', 'secondary');
+        b.addEventListener('click', () => activate(m.name, m.version));
+        td.appendChild(b);
+      }
+      tr.appendChild(td); body.appendChild(tr);
+    });
+  } catch (e) { show('#models-msg', e.message, 'err'); }
+}
+async function activate(name, version) {
+  if (!confirm('Switch to model ' + version + '?')) return;
+  try {
+    await api('/models/activate', { method: 'POST', body: JSON.stringify({ name }) });
+    loadVersion();
+    await loadModels();
+    show('#models-msg', 'Model ' + version + ' is now active.', 'ok');
+  } catch (e) { show('#models-msg', e.message, 'err'); }
+}
+
+loadVersion();
+</script>
+</body>
+</html>

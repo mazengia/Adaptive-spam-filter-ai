@@ -1,0 +1,11 @@
+{
+  "version": "20261123-123352",
+  "train_size": 3565,
+  "roc_auc": 0.9946,
+  "false_positives": 0,
+  "false_negatives": 28,
+  "thresholds": {
+    "block": 0.9296,
+    "review": 0.4648
+  }
+}
