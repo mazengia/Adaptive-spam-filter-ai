@@ -1,0 +1,16 @@
+{
+  "version": "20261123-153223",
+  "trained_at": "2026-11-23T15:32:26",
+  "train_size": 3309,
+  "test_size": 1035,
+  "roc_auc": 0.9958,
+  "false_positives": 0,
+  "false_negatives": 32,
+  "legit_in_test": 904,
+  "spam_in_test": 131,
+  "feedback_rows_used": 5,
+  "thresholds": {
+    "block": 0.9266,
+    "review": 0.4633
+  }
+}

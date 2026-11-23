@@ -7,6 +7,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from .csv_utils import FEEDBACK_COLUMNS, read_csv_compatible
+
 
 class Store:
     def __init__(self, feedback_file, models_root):
@@ -15,22 +17,34 @@ class Store:
         self._lock = threading.Lock()
 
     # ---------- feedback ----------
-    def add_feedback(self, subject: str, body: str, label: str):
+    def add_feedback(self, subject: str, body: str, label: str, sender: str = "",
+                     channel: str = "email", reply_to: str = "", headers=None,
+                     links=None, attachments=None, sender_seen_count: int = 0,
+                     redirect_count: int = 0):
         self.feedback_file.parent.mkdir(parents=True, exist_ok=True)
         with self._lock:
             new = not self.feedback_file.exists() or self.feedback_file.stat().st_size == 0
+            if not new:
+                # Normalize mixed legacy/new rows before appending, and update the header.
+                existing = read_csv_compatible(self.feedback_file).reindex(
+                    columns=FEEDBACK_COLUMNS, fill_value=""
+                )
+                existing.to_csv(self.feedback_file, index=False, encoding="utf-8")
             with self.feedback_file.open("a", newline="", encoding="utf-8") as f:
                 w = csv.writer(f)
                 if new:
-                    w.writerow(["subject", "body", "label", "date"])
+                    w.writerow(FEEDBACK_COLUMNS)
                 w.writerow([subject, body, label,
-                            datetime.now(timezone.utc).isoformat(timespec="seconds")])
+                            datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                            sender, channel, reply_to, json.dumps(headers or {}),
+                            json.dumps(links or []), json.dumps(attachments or []),
+                            sender_seen_count, redirect_count])
 
     def feedback_stats(self, used: int = 0, recent_n: int = 20) -> dict:
         with self._lock:
             if not self.feedback_file.exists() or self.feedback_file.stat().st_size == 0:
                 return {"total": 0, "spam": 0, "ham": 0, "pending": 0, "recent": []}
-            df = pd.read_csv(self.feedback_file).fillna("")
+            df = read_csv_compatible(self.feedback_file).fillna("")
         recent = [{"subject": str(r.subject)[:90], "label": str(r.label), "date": str(r.date)}
                   for r in df.tail(recent_n).iloc[::-1].itertuples()]
         total = len(df)

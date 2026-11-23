@@ -1,4 +1,7 @@
-subject,body,label,date
-Congratulations! You won in the Enat tombola,Your ticket number 4821 was drawn. Please visit your branch with your ID to collect your prize.,ham,2026-11-23T10:18:36+00:00
-Congratulations! You won in the Enat tombola,Your ticket number 4821 was drawn. Please visit your branch with your ID to collect your prize.,ham,2026-11-23T10:18:47+00:00
-Congratulations! You won in the Enat tombola,Your ticket number 4821 was drawn. Please visit your branch with your ID to collect your prize.,ham,2026-11-23T10:19:52+00:00
+subject,body,label,date,sender,channel,reply_to,headers,links,attachments,sender_seen_count,redirect_count
+Congratulations! You won in the Enat tombola,Your ticket number 4821 was drawn. Please visit your branch with your ID to collect your prize.,ham,2026-11-23T10:18:36+00:00,,,,,,,,
+Congratulations! You won in the Enat tombola,Your ticket number 4821 was drawn. Please visit your branch with your ID to collect your prize.,ham,2026-11-23T10:18:47+00:00,,,,,,,,
+Congratulations! You won in the Enat tombola,Your ticket number 4821 was drawn. Please visit your branch with your ID to collect your prize.,ham,2026-11-23T10:19:52+00:00,,,,,,,,
+ask.com,dssdfsdf,ham,2026-11-23T12:27:42+00:00,promotions@gmail.com,email,,{},[],[],0,0
+dsasd,asdasd,ham,2026-11-23T12:32:14+00:00,promotions@f.com,email,,{},[],[],0,0
+dsasd,asdasd,ham,2026-11-23T12:32:46+00:00,promotions@f.com,email,,{},[],[],0,0

@@ -6,6 +6,7 @@ import pandas as pd
 from sklearn.metrics import classification_report, confusion_matrix, roc_auc_score
 from sklearn.model_selection import train_test_split
 
+from .csv_utils import read_csv_compatible
 from .model import SpamFilter, build_pipeline, pick_thresholds
 
 # A correction from a person counts this many times more than an ordinary training example.
@@ -16,12 +17,18 @@ LABELS = {"spam": 1, "ham": 0, "1": 1, "0": 0, "1.0": 1, "0.0": 0}
 
 
 def load_csv(path) -> pd.DataFrame:
-    df = pd.read_csv(path)
+    df = read_csv_compatible(path)
     missing = {"subject", "body", "label"} - set(df.columns)
     if missing:
         raise ValueError(f"{path} is missing columns: {sorted(missing)}")
     df["subject"] = df["subject"].fillna("").astype(str)
     df["body"] = df["body"].fillna("").astype(str)
+    for col in ("subject", "body", "sender", "reply_to", "channel", "headers",
+                "links", "attachments", "sender_seen_count", "redirect_count"):
+        if col not in df.columns:
+            df[col] = 0 if col in ("sender_seen_count", "redirect_count") else ""
+    for col in ("sender_seen_count", "redirect_count"):
+        df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
     df["label"] = df["label"].astype(str).str.strip().str.lower().map(LABELS)
     return df.dropna(subset=["label"]).assign(label=lambda d: d["label"].astype(int))
 

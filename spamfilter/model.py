@@ -5,14 +5,49 @@ from pathlib import Path
 import joblib
 import numpy as np
 import pandas as pd
-from sklearn.compose import ColumnTransformer
+import os
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import precision_recall_curve
 from sklearn.pipeline import FeatureUnion, Pipeline
 from sklearn.preprocessing import FunctionTransformer
 
-from .features import MetaFeatures, clean_text
+from .features import MetaFeatures, clean_text, sender_address, sender_domain
+
+INTERNAL_DOMAIN = "enatbank.com"
+ALLOWLIST = {"noreply@enatbank.com"}
+BLOCKLIST = set()
+
+
+def _message_dataframe(subject, body, sender="", channel="email", reply_to="",
+                       headers=None, links=None, attachments=None,
+                       sender_seen_count=0, redirect_count=0):
+    return pd.DataFrame([{
+        "subject": subject or "",
+        "body": body or "",
+        "sender": sender or "",
+        "reply_to": reply_to or "",
+        "channel": channel or "email",
+        "headers": headers or {},
+        "links": links or [],
+        "attachments": attachments or [],
+        "sender_seen_count": sender_seen_count,
+        "redirect_count": redirect_count,
+    }])
+
+
+def _list_rule(sender):
+    address = sender_address(sender)
+    domain = sender_domain(sender)
+    allow = set(ALLOWLIST)
+    allow.update(x.strip().lower() for x in os.getenv("SPAM_ALLOWLIST", "").split(",") if x.strip())
+    block = set(BLOCKLIST)
+    block.update(x.strip().lower() for x in os.getenv("SPAM_BLOCKLIST", "").split(",") if x.strip())
+    if address in block or (domain and domain in block):
+        return "block"
+    if address in allow or domain == INTERNAL_DOMAIN:
+        return "allow"
+    return None
 
 
 def _combined_text(df: pd.DataFrame):
@@ -52,9 +87,35 @@ def pick_thresholds(y_true, probs, target_precision=0.995):
 class SpamFilter:
     def __init__(self, pipeline, thresholds, meta):
         self.pipeline, self.thresholds, self.meta = pipeline, thresholds, meta
+        features = pipeline.named_steps["features"]
+        transformers = dict(features.transformer_list)
+        meta_features = transformers.get("meta")
+        classifier = pipeline.named_steps["clf"]
+        if meta_features is not None and hasattr(classifier, "n_features_in_"):
+            text = transformers["text"].named_steps["tfidf"]
+            text_width = sum(
+                len(vectorizer.get_feature_names_out())
+                for _, vectorizer in text.transformer_list
+            )
+            expected_meta_width = classifier.n_features_in_ - text_width
+            if expected_meta_width >= 0:
+                # Saved models predate the expanded metadata vector; retain their trained shape.
+                meta_features.feature_count = expected_meta_width
 
-    def predict(self, subject: str, body: str, sender: str = "") -> dict:
-        df = pd.DataFrame({"subject": [subject], "body": [body]})
+    def predict(self, subject: str, body: str, sender: str = "", channel: str = "email",
+                reply_to: str = "", headers=None, links=None, attachments=None,
+                sender_seen_count: int = 0, redirect_count: int = 0) -> dict:
+        df = _message_dataframe(subject, body, sender, channel, reply_to, headers,
+                                links, attachments, sender_seen_count, redirect_count)
+        rule = _list_rule(sender)
+        if rule == "allow":
+            return {"verdict": "HAM", "spam_probability": 0.0,
+                    "model_version": self.meta["version"],
+                    "explanation": ["Allowed sender: trusted Enat Bank or allowlist"]}
+        if rule == "block":
+            return {"verdict": "SPAM", "spam_probability": 1.0,
+                    "model_version": self.meta["version"],
+                    "explanation": ["Blocked sender: known-bad sender or blocklist"]}
         prob = float(self.pipeline.predict_proba(df)[0][1])
         if prob >= self.thresholds["block"]:
             verdict = "SPAM"
@@ -75,7 +136,23 @@ class SpamFilter:
         contrib = X[0, :n_word].toarray().ravel() * clf.coef_[0][:n_word]
         names = word_vec.get_feature_names_out()
         top = np.argsort(contrib)[-n:][::-1]
-        return [names[i] for i in top if contrib[i] > 0]
+        words = [names[i] for i in top if contrib[i] > 0]
+        if hasattr(X, "tocsr"):
+            meta = X[0, n_word:].tocsr().toarray().ravel().tolist()
+        else:
+            meta = np.asarray(X[0, n_word:]).ravel().tolist()
+        explanations = []
+        if len(meta) > 8 and (meta[7] < 0 or meta[8] < 0):
+            explanations.append("Sender fails SPF or DKIM authentication")
+        if len(meta) > 9 and meta[9] < 0:
+            explanations.append("Sender fails DMARC authentication")
+        if len(meta) > 13 and (meta[12] > 0 or meta[13] > 0):
+            explanations.append("Display name or Reply-To may be mismatched")
+        if len(meta) > 16 and (meta[14] > 0 or meta[15] > 0 or meta[16] > 0):
+            explanations.append("Link domain is suspicious or shortened")
+        if len(meta) > 18 and meta[18] > 0:
+            explanations.append("Risky attachment type detected")
+        return explanations + words
 
     def save(self, directory: str):
         d = Path(directory); d.mkdir(parents=True, exist_ok=True)

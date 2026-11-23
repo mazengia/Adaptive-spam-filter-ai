@@ -41,6 +41,13 @@ class Email(BaseModel):
     subject: str = Field("", max_length=1000)
     body: str = Field("", max_length=200_000)
     sender: str = ""
+    channel: str = "email"
+    reply_to: str = ""
+    headers: dict[str, str] = Field(default_factory=dict)
+    links: list[str] = Field(default_factory=list)
+    attachments: list[str] = Field(default_factory=list)
+    sender_seen_count: int = 0
+    redirect_count: int = 0
 
 
 class Feedback(Email):
@@ -64,13 +71,18 @@ def health():
 
 @app.post("/predict", dependencies=[Depends(_auth)])
 def predict(email: Email):
-    return model.predict(email.subject, email.body, email.sender)
+    return model.predict(email.subject, email.body, email.sender, email.channel,
+                         email.reply_to, email.headers, email.links,
+                         email.attachments, email.sender_seen_count,
+                         email.redirect_count)
 
 
 @app.post("/feedback", dependencies=[Depends(_auth)])
 def feedback(fb: Feedback):
     """People report mistakes (or confirm correct results). These become training data."""
-    store.add_feedback(fb.subject, fb.body, fb.correct_label)
+    store.add_feedback(fb.subject, fb.body, fb.correct_label, fb.sender, fb.channel,
+                       fb.reply_to, fb.headers, fb.links, fb.attachments,
+                       fb.sender_seen_count, fb.redirect_count)
     return {"status": "recorded"}
 
 

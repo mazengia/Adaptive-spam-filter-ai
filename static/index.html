@@ -99,6 +99,11 @@
       </div>
       <label for="sender">Sender</label>
       <input id="sender" placeholder="name@example.com">
+      <label for="channel">Channel</label>
+      <select id="channel" style="width:100%;padding:9px 11px;font:inherit;border:1px solid var(--border);border-radius:7px;background:var(--input);color:var(--text)">
+        <option value="email">Email</option>
+        <option value="sms">SMS</option>
+      </select>
       <label for="subject">Subject</label>
       <input id="subject" placeholder="Email subject">
       <label for="body">Message</label>
@@ -256,7 +261,8 @@ $('#clear').addEventListener('click', () => {
 });
 
 $('#check').addEventListener('click', async () => {
-  const email = { sender: $('#sender').value, subject: $('#subject').value, body: $('#body').value };
+  const email = { sender: $('#sender').value, channel: $('#channel').value,
+                  subject: $('#subject').value, body: $('#body').value };
   if (!email.subject.trim() && !email.body.trim()) { show('#check-msg', 'Enter a subject or a message first.', 'err'); return; }
   const btn = $('#check');
   setBusy(btn, true, 'Checking…'); show('#check-msg');
